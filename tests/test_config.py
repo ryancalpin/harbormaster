@@ -1,5 +1,4 @@
 import pytest
-import tomllib
 from pathlib import Path
 from harbormaster.config import HarbormasterConfig, load_config, save_config
 
@@ -21,9 +20,16 @@ def test_save_and_reload_config(tmp_path):
     config_file = tmp_path / "config.toml"
     cfg = load_config(config_file)
     cfg.approval_gateway = "telegram"
+    cfg.approval_timeout = 30
+    cfg.watch_range = (2000, 40000)
+    cfg.telegram.bot_token = "test-token-123"
     save_config(cfg, config_file)
     reloaded = load_config(config_file)
     assert reloaded.approval_gateway == "telegram"
+    assert reloaded.approval_timeout == 30
+    assert reloaded.watch_range == (2000, 40000)
+    assert isinstance(reloaded.watch_range, tuple)
+    assert reloaded.telegram.bot_token == "test-token-123"
 
 def test_secret_stable_across_reloads(tmp_path):
     config_file = tmp_path / "config.toml"
