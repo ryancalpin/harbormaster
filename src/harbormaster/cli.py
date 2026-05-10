@@ -22,7 +22,7 @@ def build_client(cfg=None) -> httpx.Client:
 def parse_ttl(value: str) -> int:
     """Parse '2h', '1d', '30m' → seconds. Raises ValueError on bad input."""
     units = {"h": 3600, "d": 86400, "m": 60, "s": 1}
-    if value[-1] in units:
+    if value and value[-1] in units:
         try:
             return int(value[:-1]) * units[value[-1]]
         except ValueError:
@@ -94,6 +94,12 @@ def cmd_reserve(client: httpx.Client, port: int, ttl_seconds: int | None, perman
             print("Invalid choice.", file=sys.stderr)
             sys.exit(1)
     r = client.post("/reserve", json={"port": port, "ttl_seconds": ttl})
+    if r.status_code == 409:
+        print(r.json().get("error", "Port already reserved."), file=sys.stderr)
+        sys.exit(1)
+    if r.status_code == 403:
+        print("Denied.", file=sys.stderr)
+        sys.exit(1)
     r.raise_for_status()
     data = r.json()
     until = data.get("reserved_until", "permanent")
