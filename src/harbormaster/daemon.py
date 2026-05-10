@@ -10,6 +10,7 @@ from harbormaster.api import build_app
 from harbormaster.approval.tui_stub import TuiStubGateway
 from harbormaster.config import load_config, _default_db_path
 from harbormaster.lock_engine import LockEngine
+from harbormaster.models import PortRecord, PortState
 from harbormaster.negotiation import NegotiationHolds
 from harbormaster.scanner import PortScanner
 from harbormaster.state import StateDB
@@ -17,6 +18,10 @@ from harbormaster.tailscale import TailscaleDetector
 from harbormaster.watcher import ProcessWatcher
 
 logger = logging.getLogger("harbormaster")
+
+
+class StartupError(Exception):
+    pass
 
 
 class HarbormasterDaemon:
@@ -33,7 +38,6 @@ class HarbormasterDaemon:
         self._scan_task: asyncio.Task | None = None
 
     async def startup(self) -> None:
-        logging.basicConfig(level=logging.INFO, stream=sys.stderr)
         logger.info("Harbormaster starting up")
 
         await self.db.init()
@@ -42,9 +46,10 @@ class HarbormasterDaemon:
         api_port = self.cfg.api_port
         success = await self.lock_engine.lock(api_port)
         if not success:
-            logger.error(f"Cannot bind to API port {api_port} — already in use. Is another instance running?")
-            sys.exit(1)
+            raise StartupError(f"Cannot bind to API port {api_port} — already in use. Is another instance running?")
         logger.info(f"API port :{api_port} locked")
+        # Persist so scanner never re-registers it as CLAIMED
+        await self.db.set_port(PortRecord(port=api_port, state=PortState.LOCKED))
 
         locked_records = await self.db.get_locked_ports()
         for record in locked_records:
@@ -85,11 +90,19 @@ class HarbormasterDaemon:
         logger.info("Harbormaster shutting down")
         if self._scan_task:
             self._scan_task.cancel()
+            try:
+                await self._scan_task
+            except asyncio.CancelledError:
+                pass
         await self.lock_engine.shutdown()
         await self.db.close()
 
     async def serve(self) -> None:
-        await self.startup()
+        try:
+            await self.startup()
+        except StartupError as e:
+            logger.error(str(e))
+            sys.exit(1)
         app = build_app(
             cfg=self.cfg,
             db=self.db,
@@ -119,6 +132,10 @@ def install_service() -> None:
     import subprocess
 
     unit_src = Path(__file__).parent.parent.parent / "systemd" / "harbormaster.service"
+    if not unit_src.exists():
+        print(f"Error: service unit file not found at {unit_src}", file=sys.stderr)
+        print("Run 'harbormasterd install' from the source checkout directory.", file=sys.stderr)
+        sys.exit(1)
     systemd_user_dir = Path.home() / ".config" / "systemd" / "user"
     systemd_user_dir.mkdir(parents=True, exist_ok=True)
     dest = systemd_user_dir / "harbormaster.service"
@@ -131,6 +148,7 @@ def install_service() -> None:
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, stream=sys.stderr)
     if len(sys.argv) > 1 and sys.argv[1] == "install":
         install_service()
         return
