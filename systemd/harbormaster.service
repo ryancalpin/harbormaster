@@ -1,0 +1,14 @@
+[Unit]
+Description=Harbormaster Port Allocation Daemon
+Documentation=https://github.com/ryancalpin/harbormaster
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/harbormasterd
+Restart=always
+RestartSec=2
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
