@@ -27,7 +27,10 @@ class ApprovalManager:
             return False
         _, future = self._pending.pop(request_id)
         if not future.done():
-            future.set_result(result)
+            try:
+                future.set_result(result)
+            except asyncio.InvalidStateError:
+                pass
         return True
 
     def cancel(self, request_id: str) -> None:
