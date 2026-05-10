@@ -54,25 +54,27 @@ class NtfyGateway(ApprovalGateway):
     async def wait_for_response(self, request: ApprovalRequest) -> ApprovalResult:
         timeout = self._response_timeout if self._response_timeout > 0 else 300
         deadline = asyncio.get_event_loop().time() + timeout
-        response_topic = f"{self._topic}-allow"
+        allow_topic = f"{self._topic}-allow"
+        deny_topic = f"{self._topic}-deny"
         async with self._make_client() as client:
             while asyncio.get_event_loop().time() < deadline:
-                try:
-                    r = await client.get(
-                        f"{self._server}/{response_topic}/json",
-                        params={"poll": 1, "since": "1m"},
-                        timeout=5,
-                    )
-                    if r.status_code == 200:
-                        for line in r.text.strip().splitlines():
-                            try:
-                                msg = json.loads(line)
-                                if request.request_id in msg.get("message", ""):
-                                    return ApprovalResult.ALLOW
-                            except Exception:
-                                pass
-                except Exception:
-                    pass
+                for topic, result in [(allow_topic, ApprovalResult.ALLOW), (deny_topic, ApprovalResult.DENY)]:
+                    try:
+                        r = await client.get(
+                            f"{self._server}/{topic}/json",
+                            params={"poll": 1, "since": "1m"},
+                            timeout=5,
+                        )
+                        if r.status_code == 200:
+                            for line in r.text.strip().splitlines():
+                                try:
+                                    msg = json.loads(line)
+                                    if request.request_id in msg.get("message", ""):
+                                        return result
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
                 await asyncio.sleep(2)
         return ApprovalResult.DENY
 

@@ -93,6 +93,7 @@ class HarbormasterApp(App[None]):
         self.set_interval(2.5, self._refresh_ports)
         self.set_interval(1.0, self._check_approvals)
         self.run_worker(self._refresh_ports(), exclusive=True)
+        self._handling_approvals: set[str] = set()
 
     async def _refresh_ports(self) -> None:
         client = DaemonClient()
@@ -158,15 +159,21 @@ class HarbormasterApp(App[None]):
         if not approvals:
             return
         approval = approvals[0]
+        if approval["request_id"] in self._handling_approvals:
+            return
+        self._handling_approvals.add(approval["request_id"])
 
         async def handle_approval() -> None:
-            result = await self.push_screen_wait(ApprovalModal(approval))
-            client2 = DaemonClient()
             try:
-                async with client2:
-                    await client2.respond_approval(approval["request_id"], result or "deny")
-            except Exception:
-                pass
+                result = await self.push_screen_wait(ApprovalModal(approval))
+                client2 = DaemonClient()
+                try:
+                    async with client2:
+                        await client2.respond_approval(approval["request_id"], result or "deny")
+                except Exception:
+                    pass
+            finally:
+                self._handling_approvals.discard(approval["request_id"])
 
         self.run_worker(handle_approval(), exclusive=False)
 
