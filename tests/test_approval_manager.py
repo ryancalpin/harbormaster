@@ -62,3 +62,23 @@ async def test_tui_gateway_allow(manager):
     asyncio.create_task(approve_after_delay())
     result = await gw.request_approval(req)
     assert result == ApprovalResult.ALLOW
+
+
+async def test_factory_tui_gateway(manager):
+    from harbormaster.approval.factory import build_gateway
+    from harbormaster.approval.tui_gateway import TuiGateway
+    from harbormaster.config import HarbormasterConfig
+    cfg = HarbormasterConfig()
+    cfg.approval_gateway = "tui"
+    gw = build_gateway(cfg, manager)
+    assert isinstance(gw, TuiGateway)
+
+
+async def test_factory_unknown_falls_back(manager):
+    from harbormaster.approval.factory import build_gateway
+    from harbormaster.approval.tui_stub import TuiStubGateway
+    from harbormaster.config import HarbormasterConfig
+    cfg = HarbormasterConfig()
+    cfg.approval_gateway = "unknown-gateway"
+    gw = build_gateway(cfg, manager)
+    assert isinstance(gw, TuiStubGateway)

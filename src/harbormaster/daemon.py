@@ -7,7 +7,8 @@ from pathlib import Path
 import uvicorn
 
 from harbormaster.api import build_app
-from harbormaster.approval.tui_stub import TuiStubGateway
+from harbormaster.approval.factory import build_gateway
+from harbormaster.approval.manager import ApprovalManager
 from harbormaster.config import load_config, _default_db_path
 from harbormaster.lock_engine import LockEngine
 from harbormaster.models import PortRecord, PortState
@@ -31,7 +32,8 @@ class HarbormasterDaemon:
         self.db = StateDB(self._db_path)
         self.lock_engine = LockEngine()
         self.holds = NegotiationHolds()
-        self.gateway = TuiStubGateway(timeout=self.cfg.approval_timeout)
+        self.approval_manager = ApprovalManager()
+        self.gateway = build_gateway(self.cfg, self.approval_manager)
         self.scanner = PortScanner(self.db, watch_range=tuple(self.cfg.watch_range))
         self.watcher = ProcessWatcher(self.db)
         self.tailscale = TailscaleDetector()
@@ -110,6 +112,9 @@ class HarbormasterDaemon:
             lock_engine=self.lock_engine,
             holds=self.holds,
             gateway=self.gateway,
+            approval_manager=self.approval_manager,
+            scanner=self.scanner,
+            tailscale=self.tailscale,
         )
         self._scan_task = asyncio.create_task(self._background_loop())
         # Release the socket lock on the API port so uvicorn can bind it.
