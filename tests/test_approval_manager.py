@@ -48,3 +48,17 @@ async def test_register_second_time_same_id_is_idempotent(manager):
     f1 = manager.register(req)
     f2 = manager.register(req)
     assert f1 is f2
+
+
+async def test_tui_gateway_allow(manager):
+    from harbormaster.approval.tui_gateway import TuiGateway
+    gw = TuiGateway(manager, timeout=0)
+    req = ApprovalRequest(action="lock", port=5000)
+
+    async def approve_after_delay():
+        await asyncio.sleep(0.05)
+        manager.respond(req.request_id, ApprovalResult.ALLOW)
+
+    asyncio.create_task(approve_after_delay())
+    result = await gw.request_approval(req)
+    assert result == ApprovalResult.ALLOW
