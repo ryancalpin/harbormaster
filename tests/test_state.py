@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from harbormaster.models import PortState, PortRecord
 from harbormaster.state import StateDB
 
@@ -45,8 +45,8 @@ async def test_get_locked_ports(db):
     assert locked[0].port == 3000
 
 async def test_expire_reservations(db):
-    past = datetime.utcnow() - timedelta(hours=1)
-    future = datetime.utcnow() + timedelta(hours=1)
+    past = datetime.now(timezone.utc) - timedelta(hours=1)
+    future = datetime.now(timezone.utc) + timedelta(hours=1)
     await db.set_port(PortRecord(port=3000, state=PortState.RESERVED, reserved_until=past))
     await db.set_port(PortRecord(port=4000, state=PortState.RESERVED, reserved_until=future))
     await db.expire_reservations()

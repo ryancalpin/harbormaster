@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 class NegotiationHolds:
@@ -13,7 +13,7 @@ class NegotiationHolds:
         self._holds: dict[int, datetime] = {}
 
     def add(self, port: int, ttl_seconds: int = 10) -> None:
-        self._holds[port] = datetime.utcnow() + timedelta(seconds=ttl_seconds)
+        self._holds[port] = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
 
     def release(self, port: int) -> None:
         self._holds.pop(port, None)
@@ -22,13 +22,13 @@ class NegotiationHolds:
         expiry = self._holds.get(port)
         if expiry is None:
             return False
-        if datetime.utcnow() >= expiry:
+        if datetime.now(timezone.utc) >= expiry:
             del self._holds[port]
             return False
         return True
 
     def expire_stale(self) -> None:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expired = [p for p, exp in self._holds.items() if now >= exp]
         for p in expired:
             del self._holds[p]
