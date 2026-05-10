@@ -102,6 +102,7 @@ class HarbormasterDaemon:
             await self.startup()
         except StartupError as e:
             logger.error(str(e))
+            await self.shutdown()
             sys.exit(1)
         app = build_app(
             cfg=self.cfg,
