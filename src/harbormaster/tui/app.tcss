@@ -1,0 +1,106 @@
+Screen {
+    background: #0d1117;
+    color: #c9d1d9;
+}
+
+#header-bar {
+    height: 1;
+    background: #161b22;
+    padding: 0 1;
+    color: #8b949e;
+}
+
+.daemon-ok { color: #3fb950; }
+.daemon-down { color: #f85149; }
+
+#filter-bar {
+    height: 3;
+    background: #161b22;
+    padding: 0 1;
+    align: left middle;
+}
+
+#filter-bar Button {
+    min-width: 10;
+    height: 1;
+    margin: 0 1 0 0;
+    border: none;
+    background: #21262d;
+    color: #8b949e;
+}
+
+#filter-bar Button.-active {
+    background: #1f6feb;
+    color: #ffffff;
+}
+
+#port-table {
+    height: 1fr;
+    border: none;
+}
+
+#action-bar {
+    height: 3;
+    background: #161b22;
+    padding: 0 1;
+    align: left middle;
+    display: none;
+}
+
+#action-bar.visible {
+    display: block;
+}
+
+#action-bar Button {
+    min-width: 12;
+    height: 1;
+    margin: 0 1 0 0;
+    border: none;
+}
+
+#btn-lock { background: #1f6feb; color: #90caf9; }
+#btn-unlock { background: #21262d; color: #8b949e; }
+#btn-evict { background: #b91c1c; color: #fca5a5; }
+#btn-copy { background: #21262d; color: #8b949e; }
+
+ApprovalModal {
+    align: center middle;
+}
+
+#approval-dialog {
+    background: #161b22;
+    border: solid #30363d;
+    padding: 2 4;
+    width: 60;
+    height: auto;
+}
+
+#approval-title {
+    text-align: center;
+    color: #f0883e;
+    margin-bottom: 1;
+}
+
+#approval-detail {
+    color: #8b949e;
+    margin-bottom: 2;
+}
+
+#approval-buttons {
+    align: center middle;
+    height: 3;
+}
+
+#btn-allow {
+    background: #238636;
+    color: #aff5b4;
+    margin: 0 2;
+    min-width: 12;
+}
+
+#btn-deny {
+    background: #b91c1c;
+    color: #fca5a5;
+    margin: 0 2;
+    min-width: 12;
+}
