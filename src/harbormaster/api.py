@@ -1,8 +1,8 @@
 from __future__ import annotations
 import asyncio
 import os
+import psutil
 import signal
-import subprocess
 from datetime import datetime, timedelta, timezone
 
 from starlette.applications import Starlette
@@ -46,8 +46,11 @@ def build_app(
         })
 
     async def request_port(request: Request) -> JSONResponse:
-        preferred = int(request.query_params.get("port", 3000))
-        max_port = int(request.query_params.get("max_port", 65000))
+        try:
+            preferred = int(request.query_params.get("port", 3000))
+            max_port = int(request.query_params.get("max_port", 65000))
+        except ValueError:
+            return JSONResponse({"error": "port and max_port must be integers"}, status_code=400)
         records = await db.list_ports()
         unavailable = {
             r.port for r in records
@@ -75,8 +78,11 @@ def build_app(
         })
 
     async def lock_port(request: Request) -> JSONResponse:
-        body = await request.json()
-        port = body["port"]
+        try:
+            body = await request.json()
+            port = int(body["port"])
+        except (Exception,):
+            return JSONResponse({"error": "invalid request body"}, status_code=400)
         approval = ApprovalRequest(action="lock", port=port)
         result = await gateway.request_approval(approval)
         if result != ApprovalResult.ALLOW:
@@ -98,15 +104,21 @@ def build_app(
         return JSONResponse({"port": port, "state": "locked"})
 
     async def unlock_port(request: Request) -> JSONResponse:
-        body = await request.json()
-        port = body["port"]
+        try:
+            body = await request.json()
+            port = int(body["port"])
+        except (Exception,):
+            return JSONResponse({"error": "invalid request body"}, status_code=400)
         await lock_engine.unlock(port)
         await db.remove_port(port)
         return JSONResponse({"port": port, "state": "open"})
 
     async def evict_port(request: Request) -> JSONResponse:
-        body = await request.json()
-        port = body["port"]
+        try:
+            body = await request.json()
+            port = int(body["port"])
+        except (Exception,):
+            return JSONResponse({"error": "invalid request body"}, status_code=400)
         existing = await db.get_port(port)
         pid = existing.pid if existing else None
         process_name = existing.process_name if existing else None
@@ -114,12 +126,17 @@ def build_app(
         is_systemd = False
         if pid:
             try:
-                r = subprocess.run(
-                    ["systemctl", "status", str(pid)],
-                    capture_output=True, timeout=2
+                proc = await asyncio.create_subprocess_exec(
+                    "systemctl", "status", str(pid),
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
                 )
-                is_systemd = r.returncode == 0
-            except (FileNotFoundError, subprocess.TimeoutExpired):
+                try:
+                    await asyncio.wait_for(proc.communicate(), timeout=2.0)
+                    is_systemd = proc.returncode == 0
+                except asyncio.TimeoutError:
+                    proc.kill()
+            except FileNotFoundError:
                 pass
 
         approval = ApprovalRequest(
@@ -135,12 +152,16 @@ def build_app(
 
         if pid:
             try:
-                os.kill(pid, signal.SIGTERM)
-                await asyncio.sleep(3)
-                import psutil
                 if psutil.pid_exists(pid):
-                    os.kill(pid, signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
+                    proc_obj = psutil.Process(pid)
+                    if process_name and proc_obj.name() != process_name:
+                        # PID recycled to different process — abort kill
+                        return JSONResponse({"error": "PID reuse detected — eviction aborted"}, status_code=409)
+                    os.kill(pid, signal.SIGTERM)
+                    await asyncio.sleep(3)
+                    if psutil.pid_exists(pid):
+                        os.kill(pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError, psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
 
         try:
@@ -152,8 +173,11 @@ def build_app(
         return JSONResponse({"port": port, "state": "locked", "evicted_pid": pid})
 
     async def claim_port(request: Request) -> JSONResponse:
-        body = await request.json()
-        port = body["port"]
+        try:
+            body = await request.json()
+            port = int(body["port"])
+        except (Exception,):
+            return JSONResponse({"error": "invalid request body"}, status_code=400)
         pid = body.get("pid")
         name = body.get("name", "unknown")
         holds.release(port)
@@ -162,8 +186,11 @@ def build_app(
         return JSONResponse({"port": port, "state": "claimed"})
 
     async def reserve_port(request: Request) -> JSONResponse:
-        body = await request.json()
-        port = body["port"]
+        try:
+            body = await request.json()
+            port = int(body["port"])
+        except (Exception,):
+            return JSONResponse({"error": "invalid request body"}, status_code=400)
         ttl_seconds = body.get("ttl_seconds")
         if ttl_seconds is None:
             return JSONResponse({"error": "ttl_seconds required"}, status_code=422)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import enum
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class PortState(enum.Enum):
@@ -19,8 +19,8 @@ class PortRecord:
     pid: int | None = None
     process_name: str | None = None
     reserved_until: datetime | None = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_dict(self) -> dict:
         return {

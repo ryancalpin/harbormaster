@@ -1,6 +1,6 @@
 from __future__ import annotations
 import aiosqlite
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from harbormaster.models import PortRecord, PortState
 
@@ -41,7 +41,7 @@ class StateDB:
         return self._row_to_record(row)
 
     async def set_port(self, record: PortRecord) -> None:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         await self._db.execute("""
             INSERT INTO ports (port, state, pid, process_name, reserved_until, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -86,7 +86,7 @@ class StateDB:
         return [self._row_to_record(r) for r in rows]
 
     async def expire_reservations(self) -> None:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         await self._db.execute("""
             DELETE FROM ports
             WHERE state = ? AND reserved_until IS NOT NULL AND reserved_until < ?
