@@ -150,9 +150,14 @@ def install_service() -> None:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, stream=sys.stderr)
-    if len(sys.argv) > 1 and sys.argv[1] == "install":
-        install_service()
-        return
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "install":
+            install_service()
+            return
+        if sys.argv[1] == "--mcp":
+            from harbormaster.mcp_server import main as mcp_main
+            mcp_main()
+            return
     daemon = HarbormasterDaemon()
     try:
         asyncio.run(daemon.serve())
