@@ -154,9 +154,10 @@ def build_app(
             try:
                 if psutil.pid_exists(pid):
                     proc_obj = psutil.Process(pid)
-                    if process_name and proc_obj.name() != process_name:
+                    if process_name is not None and proc_obj.name() != process_name:
                         # PID recycled to different process — abort kill
                         return JSONResponse({"error": "PID reuse detected — eviction aborted"}, status_code=409)
+                    # When process_name is not stored we cannot validate — proceed
                     os.kill(pid, signal.SIGTERM)
                     await asyncio.sleep(3)
                     if psutil.pid_exists(pid):
@@ -178,7 +179,11 @@ def build_app(
             port = int(body["port"])
         except (Exception,):
             return JSONResponse({"error": "invalid request body"}, status_code=400)
-        pid = body.get("pid")
+        raw_pid = body.get("pid")
+        try:
+            pid = int(raw_pid) if raw_pid is not None else None
+        except (ValueError, TypeError):
+            return JSONResponse({"error": "pid must be an integer"}, status_code=400)
         name = body.get("name", "unknown")
         holds.release(port)
         record = PortRecord(port=port, state=PortState.CLAIMED, pid=pid, process_name=name)
