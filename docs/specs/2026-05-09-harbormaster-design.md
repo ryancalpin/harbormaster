@@ -58,11 +58,27 @@ Harbormaster solves this with hard enforcement (socket-holding locks that produc
 
 | State | Description | Enforcement |
 |-------|-------------|-------------|
-| `free` | No process bound, no lock | None |
-| `in-use` | Process bound, unprotected | None |
-| `claimed` | Tracked by Harbormaster (soft) | Visible in TUI only |
-| `reserved` | Pending assignment, 10s TTL | Hard (daemon holds socket during TTL) |
-| `locked` | Daemon holds bound socket | Hard — any intruder gets `EADDRINUSE` |
+| `open` | Nothing bound, nothing registered | None |
+| `reserved` | Pre-claimed for future use, no process yet | Soft — blocks `request` from assigning it |
+| `pending` | Active negotiation, 10s TTL while agent binds | Hard — daemon holds socket during TTL |
+| `in-use` | Process bound, not yet registered with Harbormaster | None — auto-registered to `claimed` on next scan |
+| `claimed` | Process bound + registered/tracked, not locked | Soft — blocks `request`, process-death watched |
+| `locked` | Registered + daemon holds socket | Hard — `EADDRINUSE` for any intruder |
+
+**Auto-registration:** On every scan cycle (2–3s), any `in-use` port not yet registered is automatically promoted to `claimed`. Harbormaster reads the PID and process name from `psutil`, writes the registration to SQLite, and begins watching the process. When the process exits, the state drops back to `open`.
+
+**State transitions:**
+```
+open ──────────────────────> reserved (user reserves for future)
+open ──> pending ──> claimed  (agent requested + bound + claimed)
+                 ──> open     (TTL expired, nobody bound)
+in-use ──> claimed            (auto-registered on next scan)
+claimed ──> locked            (user escalates)
+locked  ──> claimed           (user downgrades, daemon releases socket)
+claimed ──> open              (process exits, watcher detects)
+reserved ──> pending          (agent requests the reserved port)
+reserved ──> open             (user cancels reservation)
+```
 
 ---
 
