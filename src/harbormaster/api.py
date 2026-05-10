@@ -13,11 +13,14 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from harbormaster.approval.base import ApprovalGateway, ApprovalRequest, ApprovalResult
+from harbormaster.approval.manager import ApprovalManager
 from harbormaster.config import HarbormasterConfig
 from harbormaster.lock_engine import LockEngine, PrivilegedPortError
 from harbormaster.models import PortRecord, PortState
 from harbormaster.negotiation import NegotiationHolds
+from harbormaster.scanner import PortScanner
 from harbormaster.state import StateDB
+from harbormaster.tailscale import TailscaleDetector
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -37,6 +40,9 @@ def build_app(
     lock_engine: LockEngine,
     holds: NegotiationHolds,
     gateway: ApprovalGateway,
+    approval_manager: ApprovalManager | None = None,
+    scanner: PortScanner | None = None,
+    tailscale: TailscaleDetector | None = None,
 ) -> Starlette:
 
     async def health(request: Request) -> JSONResponse:
@@ -223,6 +229,61 @@ def build_app(
         records = await db.list_ports()
         return JSONResponse({"ports": [r.to_dict() for r in records]})
 
+    async def list_approvals(request: Request) -> JSONResponse:
+        if approval_manager is None:
+            return JSONResponse({"approvals": []})
+        pending = approval_manager.list_pending()
+        return JSONResponse({"approvals": [
+            {
+                "request_id": r.request_id,
+                "action": r.action,
+                "port": r.port,
+                "pid": r.pid,
+                "process_name": r.process_name,
+                "requester": r.requester,
+            }
+            for r in pending
+        ]})
+
+    async def respond_approval(request: Request) -> JSONResponse:
+        if approval_manager is None:
+            return JSONResponse({"error": "no approval manager"}, status_code=503)
+        request_id = request.path_params["request_id"]
+        try:
+            body = await request.json()
+            result_str = body["result"]
+        except (Exception,):
+            return JSONResponse({"error": "invalid request body"}, status_code=400)
+        from harbormaster.approval.base import ApprovalResult
+        try:
+            result = ApprovalResult(result_str)
+        except ValueError:
+            return JSONResponse({"error": "result must be 'allow' or 'deny'"}, status_code=400)
+        ok = approval_manager.respond(request_id, result)
+        if not ok:
+            return JSONResponse({"error": "unknown request_id"}, status_code=404)
+        return JSONResponse({"request_id": request_id, "result": result_str})
+
+    async def live_ports(request: Request) -> JSONResponse:
+        if scanner is None:
+            return JSONResponse({"ports": [], "tailscale_ip": None})
+        live = await scanner.scan()
+        db_records = await db.list_ports()
+        db_map = {r.port: r for r in db_records}
+        ts_ip = tailscale.current.ipv4 if tailscale and tailscale.current else None
+        result = []
+        for lp in live:
+            db_rec = db_map.get(lp.port)
+            result.append({
+                "port": lp.port,
+                "pid": lp.pid,
+                "process_name": lp.process_name,
+                "is_listen": lp.is_listen,
+                "interface": lp.interface,
+                "state": db_rec.state.value if db_rec else "in-use",
+            })
+        return JSONResponse({"ports": result, "tailscale_ip": ts_ip})
+
     routes = [
         Route("/health", health),
         Route("/request", request_port),
@@ -233,6 +294,9 @@ def build_app(
         Route("/reserve", reserve_port, methods=["POST"]),
         Route("/reserve/{port:int}", unreserve_port, methods=["DELETE"]),
         Route("/list", list_ports),
+        Route("/approvals", list_approvals),
+        Route("/approvals/{request_id}/respond", respond_approval, methods=["POST"]),
+        Route("/ports/live", live_ports),
     ]
 
     return Starlette(
