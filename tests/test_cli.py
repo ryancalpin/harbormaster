@@ -73,3 +73,17 @@ def test_cmd_status_ok(capsys):
     cmd_status(client)
     captured = capsys.readouterr()
     assert "ok" in captured.out
+
+
+def test_daemon_down_shows_friendly_message(capsys):
+    """When the daemon isn't running, all commands print a friendly message and exit 1."""
+    import httpx
+    import pytest as _pytest
+
+    client = httpx.Client(base_url="http://127.0.0.1:19998", timeout=1)
+    with _pytest.raises(SystemExit) as exc_info:
+        cmd_list(client, reserved_only=False, as_json=False)
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "daemon is not running" in captured.err
+    assert "harbormaster" in captured.err

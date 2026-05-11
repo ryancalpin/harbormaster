@@ -7,6 +7,25 @@ from pathlib import Path
 import httpx
 
 from harbormaster.config import load_config
+from harbormaster.utils import parse_ttl
+
+# Re-export parse_ttl so existing imports from harbormaster.cli still work
+__all__ = ["parse_ttl", "build_client", "api_call"]
+
+
+def _daemon_down() -> None:
+    print(
+        "harbormaster daemon is not running.\nStart it with: harbormaster",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
+def api_call(fn, *args, **kwargs) -> httpx.Response:
+    try:
+        return fn(*args, **kwargs)
+    except (httpx.ConnectError, httpx.RemoteProtocolError):
+        _daemon_down()
 
 
 def build_client(cfg=None) -> httpx.Client:
@@ -19,23 +38,12 @@ def build_client(cfg=None) -> httpx.Client:
     )
 
 
-def parse_ttl(value: str) -> int:
-    """Parse '2h', '1d', '30m' → seconds. Raises ValueError on bad input."""
-    units = {"h": 3600, "d": 86400, "m": 60, "s": 1}
-    if value and value[-1] in units:
-        try:
-            return int(value[:-1]) * units[value[-1]]
-        except ValueError:
-            pass
-    raise ValueError(f"Invalid TTL format: {value!r}. Use e.g. 1h, 8h, 24h, 30m.")
-
-
 def _state_badge(state: str) -> str:
     return {"locked": "🔒", "claimed": "◈", "reserved": "⏳", "in-use": "○", "open": " "}.get(state, state)
 
 
 def cmd_request(client: httpx.Client, port: int) -> None:
-    r = client.get("/request", params={"port": port})
+    r = api_call(client.get, "/request", params={"port": port})
     if r.status_code == 409:
         print(f"No available port found starting from {port}", file=sys.stderr)
         sys.exit(1)
@@ -44,7 +52,7 @@ def cmd_request(client: httpx.Client, port: int) -> None:
 
 
 def cmd_lock(client: httpx.Client, port: int) -> None:
-    r = client.post("/lock", json={"port": port})
+    r = api_call(client.post, "/lock", json={"port": port})
     if r.status_code == 403:
         print("Denied.", file=sys.stderr)
         sys.exit(1)
@@ -53,13 +61,13 @@ def cmd_lock(client: httpx.Client, port: int) -> None:
 
 
 def cmd_unlock(client: httpx.Client, port: int) -> None:
-    r = client.post("/unlock", json={"port": port})
+    r = api_call(client.post, "/unlock", json={"port": port})
     r.raise_for_status()
     print(f"Port {port} unlocked.")
 
 
 def cmd_evict(client: httpx.Client, port: int) -> None:
-    r = client.post("/evict", json={"port": port})
+    r = api_call(client.post, "/evict", json={"port": port})
     if r.status_code == 403:
         print("Denied.", file=sys.stderr)
         sys.exit(1)
@@ -72,12 +80,25 @@ def cmd_evict(client: httpx.Client, port: int) -> None:
 
 
 def cmd_claim(client: httpx.Client, port: int, pid: int | None, name: str) -> None:
-    r = client.post("/claim", json={"port": port, "pid": pid, "name": name})
+    r = api_call(client.post, "/claim", json={"port": port, "pid": pid, "name": name})
     r.raise_for_status()
     print(f"Port {port} claimed.")
 
 
-def cmd_reserve(client: httpx.Client, port: int, ttl_seconds: int | None, permanent: bool) -> None:
+def cmd_reserve(client: httpx.Client, port: int | None, ttl_seconds: int | None, permanent: bool) -> None:
+    if port is None:
+        if not sys.stdin.isatty():
+            print("hm reserve: port required when stdin is not a TTY", file=sys.stderr)
+            sys.exit(1)
+        raw = input("Port to reserve: ").strip()
+        try:
+            port = int(raw)
+            if not (1 <= port <= 65535):
+                raise ValueError
+        except ValueError:
+            print(f"Invalid port: {raw!r}", file=sys.stderr)
+            sys.exit(1)
+
     if permanent:
         ttl = -1
     elif ttl_seconds is not None:
@@ -93,7 +114,8 @@ def cmd_reserve(client: httpx.Client, port: int, ttl_seconds: int | None, perman
         except (ValueError, IndexError):
             print("Invalid choice.", file=sys.stderr)
             sys.exit(1)
-    r = client.post("/reserve", json={"port": port, "ttl_seconds": ttl})
+
+    r = api_call(client.post, "/reserve", json={"port": port, "ttl_seconds": ttl})
     if r.status_code == 409:
         print(r.json().get("error", "Port already reserved."), file=sys.stderr)
         sys.exit(1)
@@ -107,7 +129,7 @@ def cmd_reserve(client: httpx.Client, port: int, ttl_seconds: int | None, perman
 
 
 def cmd_unreserve(client: httpx.Client, port: int) -> None:
-    r = client.delete(f"/reserve/{port}")
+    r = api_call(client.delete, f"/reserve/{port}")
     if r.status_code == 404:
         print(f"Port {port} is not reserved.", file=sys.stderr)
         sys.exit(1)
@@ -116,7 +138,7 @@ def cmd_unreserve(client: httpx.Client, port: int) -> None:
 
 
 def cmd_list(client: httpx.Client, reserved_only: bool, as_json: bool) -> None:
-    r = client.get("/list")
+    r = api_call(client.get, "/list")
     r.raise_for_status()
     ports = r.json()["ports"]
     if reserved_only:
@@ -138,15 +160,11 @@ def cmd_list(client: httpx.Client, reserved_only: bool, as_json: bool) -> None:
 
 
 def cmd_status(client: httpx.Client) -> None:
-    try:
-        r = client.get("/health")
-        r.raise_for_status()
-        data = r.json()
-        print(f"Daemon: {data['status']}")
-        print(f"Locked ports: {data['locked']}")
-    except httpx.ConnectError:
-        print("Daemon not running.", file=sys.stderr)
-        sys.exit(1)
+    r = api_call(client.get, "/health")
+    r.raise_for_status()
+    data = r.json()
+    print(f"Daemon: {data['status']}")
+    print(f"Locked ports: {data['locked']}")
 
 
 def cmd_config() -> None:
@@ -159,7 +177,7 @@ def cmd_config() -> None:
         print("(no config file — will be created on first daemon start)")
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="hm", description="Harbormaster CLI")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -181,7 +199,7 @@ def main() -> None:
     p_claim.add_argument("--name", default="unknown")
 
     p_res = sub.add_parser("reserve", help="Reserve a port for future use")
-    p_res.add_argument("port", type=int)
+    p_res.add_argument("port", type=int, nargs="?", default=None)
     p_res.add_argument("--ttl", default=None, help="e.g. 1h, 8h, 24h, 30m")
     p_res.add_argument("--permanent", action="store_true")
 
@@ -195,7 +213,20 @@ def main() -> None:
     sub.add_parser("status", help="Daemon health")
     sub.add_parser("config", help="Show config")
 
+    p_comp = sub.add_parser("completion", help="Print shell completion script")
+    p_comp.add_argument("shell", choices=["bash", "zsh", "fish"])
+
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
     args = parser.parse_args()
+
+    if args.command == "completion":
+        import shtab
+        shtab.complete(parser, shell=args.shell, print_completion=True)
+        sys.exit(0)
 
     if args.command == "config":
         cmd_config()
