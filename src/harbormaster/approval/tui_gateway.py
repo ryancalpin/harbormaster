@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 from harbormaster.approval.base import ApprovalGateway, ApprovalRequest, ApprovalResult
 from harbormaster.approval.manager import ApprovalManager
+from harbormaster.notification.event import NotificationEvent
 
 
 class TuiGateway(ApprovalGateway):
@@ -32,3 +33,6 @@ class TuiGateway(ApprovalGateway):
 
     async def cancel(self, request_id: str) -> None:
         self._manager.cancel(request_id)
+
+    async def notify(self, event: NotificationEvent) -> None:
+        pass

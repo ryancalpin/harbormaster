@@ -6,6 +6,7 @@ import json
 import time
 import httpx
 from harbormaster.approval.base import ApprovalGateway, ApprovalRequest, ApprovalResult
+from harbormaster.notification.event import NotificationEvent
 
 
 class WebhookGateway(ApprovalGateway):
@@ -61,3 +62,15 @@ class WebhookGateway(ApprovalGateway):
 
     async def cancel(self, request_id: str) -> None:
         self._responses.pop(request_id, None)
+
+    async def notify(self, event: NotificationEvent) -> None:
+        payload = json.dumps({
+            "event": event.event_type,
+            "port": event.port,
+            "detail": event.detail,
+        }).encode()
+        headers = {"Content-Type": "application/json"}
+        if self._secret:
+            headers["X-Harbormaster-Signature"] = self._sign(payload)
+        async with httpx.AsyncClient(transport=self._transport, timeout=10) as client:
+            await client.post(self._url, content=payload, headers=headers)

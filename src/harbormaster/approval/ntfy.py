@@ -3,6 +3,7 @@ import asyncio
 import json
 import httpx
 from harbormaster.approval.base import ApprovalGateway, ApprovalRequest, ApprovalResult
+from harbormaster.notification.event import NotificationEvent
 
 
 class NtfyGateway(ApprovalGateway):
@@ -80,3 +81,14 @@ class NtfyGateway(ApprovalGateway):
 
     async def cancel(self, request_id: str) -> None:
         pass
+
+    async def notify(self, event: NotificationEvent) -> None:
+        async with self._make_client() as client:
+            await client.post(
+                f"{self._server}/{self._topic}",
+                content=event.detail.encode(),
+                headers={
+                    "Title": f"Harbormaster: {event.event_type.replace('_', ' ')} :{event.port}",
+                    "Tags": "harbormaster",
+                },
+            )

@@ -3,6 +3,7 @@ import asyncio
 import time
 import httpx
 from harbormaster.approval.base import ApprovalGateway, ApprovalRequest, ApprovalResult
+from harbormaster.notification.event import NotificationEvent
 
 TELEGRAM_API = "https://api.telegram.org"
 
@@ -85,3 +86,17 @@ class TelegramGateway(ApprovalGateway):
 
     async def cancel(self, request_id: str) -> None:
         pass
+
+    async def notify(self, event: NotificationEvent) -> None:
+        text = (
+            f"⚓ *Harbormaster Notification*\n"
+            f"Event: `{event.event_type}`\n"
+            f"Port: `:{event.port}`\n"
+            f"{event.detail}"
+        )
+        async with self._make_client() as client:
+            await client.post("/sendMessage", json={
+                "chat_id": self._chat_id,
+                "text": text,
+                "parse_mode": "Markdown",
+            })

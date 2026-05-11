@@ -2,6 +2,7 @@ from __future__ import annotations
 import httpx
 from harbormaster.approval.base import ApprovalGateway, ApprovalRequest, ApprovalResult
 from harbormaster.approval.tui_stub import TuiStubGateway
+from harbormaster.notification.event import NotificationEvent
 
 
 class SlackGateway(ApprovalGateway):
@@ -35,3 +36,8 @@ class SlackGateway(ApprovalGateway):
 
     async def cancel(self, request_id: str) -> None:
         await self._fallback.cancel(request_id)
+
+    async def notify(self, event: NotificationEvent) -> None:
+        text = f"⚓ Harbormaster `{event.event_type}`: port `:{event.port}` — {event.detail}"
+        async with httpx.AsyncClient(transport=self._transport, timeout=10) as client:
+            await client.post(self._url, json={"text": text})
