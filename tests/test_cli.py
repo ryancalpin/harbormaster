@@ -89,29 +89,34 @@ def test_daemon_down_shows_friendly_message(capsys):
     assert "harbormaster" in captured.err
 
 
-def test_completion_bash(capsys):
+def test_completion_bash(capsys, monkeypatch):
     """hm completion bash prints a non-empty bash completion script."""
-    sys.argv = ["hm", "completion", "bash"]
+    monkeypatch.setattr(sys, "argv", ["hm", "completion", "bash"])
     with pytest.raises(SystemExit) as exc_info:
         main()
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
     assert len(captured.out) > 100
+    assert "complete" in captured.out
 
 
-def test_completion_zsh(capsys):
-    sys.argv = ["hm", "completion", "zsh"]
+def test_completion_zsh(capsys, monkeypatch):
+    """hm completion zsh prints a non-empty zsh completion script."""
+    monkeypatch.setattr(sys, "argv", ["hm", "completion", "zsh"])
     with pytest.raises(SystemExit) as exc_info:
         main()
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
     assert len(captured.out) > 100
+    assert "compdef" in captured.out or "#compdef" in captured.out
 
 
-def test_completion_tcsh(capsys):
-    sys.argv = ["hm", "completion", "tcsh"]
+def test_completion_tcsh(capsys, monkeypatch):
+    """hm completion tcsh prints a non-empty tcsh completion script."""
+    monkeypatch.setattr(sys, "argv", ["hm", "completion", "tcsh"])
     with pytest.raises(SystemExit) as exc_info:
         main()
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
     assert len(captured.out) > 100
+    assert "complete" in captured.out
