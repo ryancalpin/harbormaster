@@ -16,6 +16,7 @@ from harbormaster.negotiation import NegotiationHolds
 from harbormaster.scanner import PortScanner
 from harbormaster.state import StateDB
 from harbormaster.tailscale import TailscaleDetector
+from harbormaster.notification.expiry_notifier import ExpiryNotifier
 from harbormaster.watcher import ProcessWatcher
 
 logger = logging.getLogger("harbormaster")
@@ -35,7 +36,8 @@ class HarbormasterDaemon:
         self.approval_manager = ApprovalManager()
         self.gateway = build_gateway(self.cfg, self.approval_manager)
         self.scanner = PortScanner(self.db, watch_range=tuple(self.cfg.watch_range))
-        self.watcher = ProcessWatcher(self.db)
+        self.watcher = ProcessWatcher(self.db, gateway=self.gateway)
+        self.notifier = ExpiryNotifier(lead_time_seconds=self.cfg.notification_lead_time)
         self.tailscale = TailscaleDetector()
         self._scan_task: asyncio.Task | None = None
 
@@ -80,6 +82,7 @@ class HarbormasterDaemon:
                 live = await self.scanner.scan()
                 await self.scanner.reconcile(live)
                 await self.watcher.check_all()
+                await self.notifier.check(self.db, self.gateway)
                 self.holds.expire_stale()
                 tailscale_tick += 1
                 if tailscale_tick >= 15:  # every ~30s
