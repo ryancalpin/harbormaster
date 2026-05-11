@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 from harbormaster.models import PortState, PortRecord
+from harbormaster.notification.event import NotificationEvent
 from harbormaster.watcher import ProcessWatcher
 
 @pytest.fixture
@@ -50,3 +51,33 @@ async def test_locked_port_not_removed_on_process_exit(mock_db):
     with patch("psutil.pid_exists", return_value=False):
         await watcher.check_all()
     mock_db.remove_port.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_notifies_before_removing_dead_process():
+    db = AsyncMock()
+    gateway = AsyncMock()
+    record = PortRecord(port=3001, state=PortState.CLAIMED, pid=99999, process_name="dead-process")
+
+    with patch("psutil.pid_exists", return_value=False):
+        watcher = ProcessWatcher(db, gateway=gateway)
+        await watcher._check_record(record)
+
+    gateway.notify.assert_called_once()
+    event = gateway.notify.call_args[0][0]
+    assert event.event_type == "process_died"
+    assert event.port == 3001
+    assert "dead-process" in event.detail
+    db.remove_port.assert_called_once_with(3001)
+
+
+@pytest.mark.asyncio
+async def test_no_notification_without_gateway():
+    db = AsyncMock()
+    record = PortRecord(port=3001, state=PortState.CLAIMED, pid=99999, process_name="dead-process")
+
+    with patch("psutil.pid_exists", return_value=False):
+        watcher = ProcessWatcher(db, gateway=None)
+        await watcher._check_record(record)
+
+    db.remove_port.assert_called_once_with(3001)  # still removes
