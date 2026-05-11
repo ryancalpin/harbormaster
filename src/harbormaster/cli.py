@@ -3,6 +3,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 import httpx
 
@@ -13,7 +14,7 @@ from harbormaster.utils import parse_ttl
 __all__ = ["parse_ttl", "build_client", "api_call"]
 
 
-def _daemon_down() -> None:
+def _daemon_down() -> NoReturn:
     print(
         "harbormaster daemon is not running.\nStart it with: harbormaster",
         file=sys.stderr,
@@ -110,6 +111,8 @@ def cmd_reserve(client: httpx.Client, port: int | None, ttl_seconds: int | None,
             print(f"  {i}) {label}")
         try:
             choice = int(input("Choice [1-4]: ").strip()) - 1
+            if not (0 <= choice < len(choices)):
+                raise IndexError
             ttl = choices[choice][1]
         except (ValueError, IndexError):
             print("Invalid choice.", file=sys.stderr)
