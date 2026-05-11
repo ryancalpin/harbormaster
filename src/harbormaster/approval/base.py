@@ -4,6 +4,8 @@ import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 
+from harbormaster.notification.event import NotificationEvent
+
 
 class ApprovalResult(Enum):
     ALLOW = "allow"
@@ -33,6 +35,10 @@ class ApprovalGateway(abc.ABC):
     @abc.abstractmethod
     async def cancel(self, request_id: str) -> None:
         """Called when the requesting agent disconnects before responding."""
+
+    @abc.abstractmethod
+    async def notify(self, event: NotificationEvent) -> None:
+        """Fire-and-forget notification. No response expected."""
 
     async def request_approval(self, request: ApprovalRequest) -> ApprovalResult:
         """Convenience: send + wait."""
