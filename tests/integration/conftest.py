@@ -47,7 +47,7 @@ def daemon():
             [sys.executable, "-m", "harbormaster.daemon"],
             env=env,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
 
         # Poll until healthy (5s timeout)
@@ -69,9 +69,15 @@ def daemon():
             time.sleep(0.1)
 
         if not healthy:
-            proc.kill()
-            proc.wait()
-            raise RuntimeError("Daemon did not start within 5 seconds")
+            stderr_out = b""
+            try:
+                proc.kill()
+                _, stderr_out = proc.communicate(timeout=2)
+            except Exception:
+                pass
+            raise RuntimeError(
+                f"Daemon did not start within 5 seconds.\nDaemon stderr:\n{stderr_out.decode(errors='replace')}"
+            )
 
         client = httpx.Client(
             base_url=DAEMON_BASE,
