@@ -91,7 +91,7 @@ def daemon():
         client.close()
         proc.send_signal(signal.SIGTERM)
         try:
-            proc.wait(timeout=3)
+            proc.communicate(timeout=3)
         except subprocess.TimeoutExpired:
             proc.kill()
-            proc.wait()
+            proc.communicate()
