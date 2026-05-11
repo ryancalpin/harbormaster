@@ -5,6 +5,7 @@ import tomllib
 import tomli_w
 from dataclasses import dataclass, field
 from pathlib import Path
+from harbormaster.utils import parse_ttl
 
 
 def _default_secret() -> str:
@@ -40,6 +41,7 @@ class HarbormasterConfig:
     approval_gateway: str = "tui"
     approval_fallback: str = "tui"
     approval_timeout: int = 0  # 0 = wait indefinitely
+    notification_lead_time: int = 3600
     telegram: GatewayTelegramConfig = field(default_factory=GatewayTelegramConfig)
     ntfy: GatewayNtfyConfig = field(default_factory=GatewayNtfyConfig)
     webhook: GatewayWebhookConfig = field(default_factory=GatewayWebhookConfig)
@@ -72,6 +74,12 @@ def load_config(path: Path | None = None) -> HarbormasterConfig:
     cfg.approval_gateway = data.get("approval", {}).get("gateway", cfg.approval_gateway)
     cfg.approval_fallback = data.get("approval", {}).get("fallback", cfg.approval_fallback)
     cfg.approval_timeout = data.get("approval", {}).get("timeout", cfg.approval_timeout)
+    notif = data.get("notification", {})
+    lead_time_raw = notif.get("lead_time", 3600)
+    if isinstance(lead_time_raw, str):
+        cfg.notification_lead_time = parse_ttl(lead_time_raw)
+    else:
+        cfg.notification_lead_time = int(lead_time_raw)
     ports = data.get("ports", {})
     if "watch_range" in ports:
         cfg.watch_range = tuple(ports["watch_range"])
@@ -112,6 +120,7 @@ def save_config(cfg: HarbormasterConfig, path: Path | None = None) -> None:
             "fallback": cfg.approval_fallback,
             "timeout": cfg.approval_timeout,
         },
+        "notification": {"lead_time": cfg.notification_lead_time},
         "gateways": {
             "telegram": {"bot_token": cfg.telegram.bot_token, "chat_id": cfg.telegram.chat_id},
             "ntfy": {"topic": cfg.ntfy.topic, "server": cfg.ntfy.server},

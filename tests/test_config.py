@@ -36,3 +36,31 @@ def test_secret_stable_across_reloads(tmp_path):
     cfg1 = load_config(config_file)
     cfg2 = load_config(config_file)
     assert cfg1.secret == cfg2.secret
+
+
+def test_notification_lead_time_default(tmp_path):
+    from harbormaster.config import load_config
+    cfg = load_config(tmp_path / "config.toml")
+    assert cfg.notification_lead_time == 3600  # default 1 hour
+
+
+def test_notification_lead_time_from_toml(tmp_path):
+    import tomli_w
+    from harbormaster.config import load_config
+    config_file = tmp_path / "config.toml"
+    data = {"notification": {"lead_time": "30m"}}
+    with open(config_file, "wb") as f:
+        tomli_w.dump(data, f)
+    cfg = load_config(config_file)
+    assert cfg.notification_lead_time == 1800
+
+
+def test_notification_lead_time_integer_toml(tmp_path):
+    import tomli_w
+    from harbormaster.config import load_config
+    config_file = tmp_path / "config.toml"
+    data = {"notification": {"lead_time": 7200}}
+    with open(config_file, "wb") as f:
+        tomli_w.dump(data, f)
+    cfg = load_config(config_file)
+    assert cfg.notification_lead_time == 7200
