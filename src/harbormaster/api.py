@@ -9,8 +9,10 @@ from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
+
+from harbormaster.web import build_ui_response
 
 from harbormaster.approval.base import ApprovalGateway, ApprovalRequest, ApprovalResult
 from harbormaster.approval.manager import ApprovalManager
@@ -29,6 +31,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         self._secret = secret
 
     async def dispatch(self, request: Request, call_next):
+        if request.url.path == "/ui":
+            return await call_next(request)
         if request.headers.get("X-Harbormaster-Secret") != self._secret:
             return JSONResponse({"error": "unauthorized"}, status_code=403)
         return await call_next(request)
@@ -44,6 +48,10 @@ def build_app(
     scanner: PortScanner | None = None,
     tailscale: TailscaleDetector | None = None,
 ) -> Starlette:
+
+    async def ui(request: Request) -> Response:
+        from starlette.responses import HTMLResponse
+        return HTMLResponse(build_ui_response(cfg.secret))
 
     async def health(request: Request) -> JSONResponse:
         return JSONResponse({
@@ -285,6 +293,7 @@ def build_app(
         return JSONResponse({"ports": result, "tailscale_ip": ts_ip})
 
     routes = [
+        Route("/ui", ui),
         Route("/health", health),
         Route("/request", request_port),
         Route("/lock", lock_port, methods=["POST"]),
