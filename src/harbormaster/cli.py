@@ -217,7 +217,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("config", help="Show config")
 
     p_comp = sub.add_parser("completion", help="Print shell completion script")
-    p_comp.add_argument("shell", choices=["bash", "zsh", "fish"])
+    p_comp.add_argument("shell", choices=["bash", "zsh", "tcsh"])
 
     return parser
 
@@ -228,7 +228,7 @@ def main() -> None:
 
     if args.command == "completion":
         import shtab
-        shtab.complete(parser, shell=args.shell, print_completion=True)
+        print(shtab.complete(parser, shell=args.shell))
         sys.exit(0)
 
     if args.command == "config":

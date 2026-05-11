@@ -1,8 +1,9 @@
+import sys
 import pytest
 import json
 import httpx
 from unittest.mock import patch, MagicMock
-from harbormaster.cli import build_client, parse_ttl, cmd_request, cmd_list, cmd_status
+from harbormaster.cli import build_client, parse_ttl, cmd_request, cmd_list, cmd_status, main
 
 SECRET = "test-secret"
 BASE = "http://127.0.0.1:19191"
@@ -86,3 +87,31 @@ def test_daemon_down_shows_friendly_message(capsys):
     captured = capsys.readouterr()
     assert "daemon is not running" in captured.err
     assert "harbormaster" in captured.err
+
+
+def test_completion_bash(capsys):
+    """hm completion bash prints a non-empty bash completion script."""
+    sys.argv = ["hm", "completion", "bash"]
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    assert len(captured.out) > 100
+
+
+def test_completion_zsh(capsys):
+    sys.argv = ["hm", "completion", "zsh"]
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    assert len(captured.out) > 100
+
+
+def test_completion_tcsh(capsys):
+    sys.argv = ["hm", "completion", "tcsh"]
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    assert len(captured.out) > 100
