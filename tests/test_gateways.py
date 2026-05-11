@@ -89,6 +89,8 @@ async def test_ntfy_notify():
     await gw.notify(event)
     assert len(sent) == 1
     assert "test-topic" in str(sent[0].url)
+    assert sent[0].headers.get("title", "").startswith("Harbormaster:")
+    assert "3001" in sent[0].headers.get("title", "")
 
 
 async def test_slack_notify():
@@ -132,6 +134,7 @@ async def test_webhook_notify():
     assert len(sent) == 1
     assert sent[0]["event"] == "process_died"
     assert sent[0]["port"] == 4000
+    assert sent[0]["detail"] == "PID 5678 (python) is gone"
 
 
 async def test_telegram_notify():
