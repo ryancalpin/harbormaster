@@ -1,6 +1,7 @@
 from __future__ import annotations
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import NoReturn
@@ -29,9 +30,17 @@ def api_call(fn, *args, **kwargs) -> httpx.Response:
         _daemon_down()
 
 
+def _clear_broken_ssl_env() -> None:
+    for var in ("SSL_CERT_FILE", "CURL_CA_BUNDLE"):
+        path = os.environ.get(var)
+        if path and not Path(path).exists():
+            del os.environ[var]
+
+
 def build_client(cfg=None) -> httpx.Client:
     if cfg is None:
         cfg = load_config()
+    _clear_broken_ssl_env()
     return httpx.Client(
         base_url=f"http://127.0.0.1:{cfg.api_port}",
         headers={"X-Harbormaster-Secret": cfg.secret},
